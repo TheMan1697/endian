@@ -1,0 +1,29 @@
+[package]
+name = "endian"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+byteorder = "1.4.3"
+
+[[bin]]
+name = "simple"
+path = "src/simple_struct.rs"
+
+[[bin]]
+name = "complex"
+path = "src/complex_struct.rs"
+
+[[bin]]
+name = "packet"
+path = "src/network/packet.rs"
+
+[[bin]]
+name = "IP"
+path = "src/network/ip_header.rs"
+
+[[bin]]
+name = "TCP"
+path = "src/network/tcp_header.rs"
