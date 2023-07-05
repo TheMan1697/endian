@@ -1,6 +1,3 @@
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use std::io::{Cursor, Read};
-
 #[derive(Debug)]
 struct TcpHeader {
     source_port: u16,
@@ -9,7 +6,7 @@ struct TcpHeader {
     acknowledgement_number: u32,
     data_offset: u8,
     reserved: u8,
-    flags: u8,
+    flags: u16,
     window_size: u16,
     checksum: u16,
     urgent_pointer: u16,
@@ -18,23 +15,23 @@ struct TcpHeader {
 
 impl TcpHeader {
     fn from_bytes(bytes: &[u8]) -> TcpHeader {
-        let (header_bytes, options) = bytes.split_at(20);
+        let mut iter = bytes.iter();
 
-        let mut iter = header_bytes.chunks_exact(2);
-        let source_port = u16::from_be_bytes(iter.next().unwrap().try_into().unwrap());
-        let destination_port = u16::from_be_bytes(iter.next().unwrap().try_into().unwrap());
+        let source_port = Self::u16_from_iter(&mut iter);
+        let destination_port = Self::u16_from_iter(&mut iter);
+        let sequence_number = Self::u32_from_iter(&mut iter);
+        let acknowledgement_number = Self::u32_from_iter(&mut iter);
 
-        let sequence_number = u32::from_be_bytes(iter.next().unwrap().try_into().unwrap());
-        let acknowledgement_number = u32::from_be_bytes(iter.next().unwrap().try_into().unwrap());
+        let data_offset_and_reserved_and_flags = Self::u16_from_iter(&mut iter);
+        let data_offset = (data_offset_and_reserved_and_flags >> 12) as u8;
+        let reserved = ((data_offset_and_reserved_and_flags & 0b0000_0111_0000_0000) >> 9) as u8;
+        let flags = data_offset_and_reserved_and_flags & 0b0000_0000_1_1111_1111;
 
-        let mut iter = iter.next().unwrap().chunks_exact(1);
-        let data_offset = iter.next().unwrap()[0] >> 4;
-        let reserved = (iter.next().unwrap()[0] & 0x0F) >> 1;
-        let flags = (iter.next().unwrap()[0] & 0x01) << 7 | (iter.next().unwrap()[0] >> 1);
+        let window_size = Self::u16_from_iter(&mut iter);
+        let checksum = Self::u16_from_iter(&mut iter);
+        let urgent_pointer = Self::u16_from_iter(&mut iter);
 
-        let window_size = u16::from_be_bytes(iter.next().unwrap().try_into().unwrap());
-        let checksum = u16::from_be_bytes(iter.next().unwrap().try_into().unwrap());
-        let urgent_pointer = u16::from_be_bytes(iter.next().unwrap().try_into().unwrap());
+        let options = iter.cloned().collect::<Vec<_>>();
 
         TcpHeader {
             source_port,
@@ -47,27 +44,44 @@ impl TcpHeader {
             window_size,
             checksum,
             urgent_pointer,
-            options: options.to_vec(),
+            options,
         }
     }
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
+
         bytes.extend(&self.source_port.to_be_bytes());
         bytes.extend(&self.destination_port.to_be_bytes());
         bytes.extend(&self.sequence_number.to_be_bytes());
         bytes.extend(&self.acknowledgement_number.to_be_bytes());
-        let data_offset_reserved_flags =
-            (self.data_offset << 4) | (self.reserved << 1) | (self.flags >> 7);
-        bytes.push(data_offset_reserved_flags);
-        let flags = (self.flags << 1) & 0xFE;
-        bytes.push(flags);
+
+        let data_offset_and_reserved_and_flags =
+            ((self.data_offset as u16) << 12) | ((self.reserved as u16) << 9) | self.flags;
+        bytes.extend(&data_offset_and_reserved_and_flags.to_be_bytes());
+
         bytes.extend(&self.window_size.to_be_bytes());
         bytes.extend(&self.checksum.to_be_bytes());
         bytes.extend(&self.urgent_pointer.to_be_bytes());
         bytes.extend(&self.options);
 
         bytes
+    }
+
+    fn u16_from_iter(iter: &mut std::slice::Iter<'_, u8>) -> u16 {
+        let b1 = *iter.next().unwrap() as u16;
+        let b2 = *iter.next().unwrap() as u16;
+
+        (b1 << 8) | b2
+    }
+
+    fn u32_from_iter(iter: &mut std::slice::Iter<'_, u8>) -> u32 {
+        let b1 = *iter.next().unwrap() as u32;
+        let b2 = *iter.next().unwrap() as u32;
+        let b3 = *iter.next().unwrap() as u32;
+        let b4 = *iter.next().unwrap() as u32;
+
+        (b1 << 24) | (b2 << 16) | (b3 << 8) | b4
     }
 }
 
@@ -84,12 +98,9 @@ fn main() {
         0x00, 0x00, // Urgent Pointer
     ];
 
-    // Parse bytes into a TcpHeader
     let header = TcpHeader::from_bytes(&tcp_header_bytes);
     println!("{:?}", header);
 
-    // Convert TcpHeader back into bytes
     let header_bytes = header.to_bytes();
     println!("{:?}", header_bytes);
 }
-
