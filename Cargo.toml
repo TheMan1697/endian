@@ -27,3 +27,11 @@ path = "src/network/ip_header.rs"
 [[bin]]
 name = "TCP"
 path = "src/network/tcp_header.rs"
+
+[[bin]]
+name = "sio"
+path = "src/file/simple_io.rs"
+
+[[bin]]
+name = "cio"
+path = "src/file/complex_io.rs"
